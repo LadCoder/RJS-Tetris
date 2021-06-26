@@ -2,6 +2,8 @@
 
 A web-browser based tetris game built in ReactJS and served with NodeJS.
 
+Demo: https://rjs-tetris.web.app/
+
 ## Learning Outcomes
 
 * Use of custom React hooks: useState, useCallback, useEffect, useInterval to set up the player and stage.
