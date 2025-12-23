@@ -2,13 +2,13 @@ import styled from 'styled-components';
 
 export const StyledTouchControls = styled.div`
     display: none;
-    margin-top: 12px;
+    margin-top: 8px;
     user-select: none;
 
     @media (max-width: 900px) {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 6px;
     }
 `;
 
@@ -36,6 +36,12 @@ export const ControlButton = styled.button`
 
     &:disabled {
         opacity: 0.5;
+    }
+
+    @media (max-width: 900px) {
+        padding: 10px 8px;
+        font-size: 14px;
+        border-radius: 5px;
     }
 `;
 

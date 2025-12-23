@@ -1,5 +1,5 @@
 import React from 'react';
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import ReactHowler from 'react-howler';
 
 import bgMusic from '../sounds/tetris.mp3';
@@ -37,14 +37,16 @@ const Tetris = () => {
             updatePlayerPos({x: dir, y: 0});
     }
 
+    const normalDropTime = useMemo(() => 1000 / (level + 1) + 200, [level]);
+
     const startGame = () => {
         setStage(createStage());
-        setDropTime(1000 / (level + 1) + 200);
+        setLevel(0);
+        setDropTime(1200);
         resetPlayer();
         setGameOver(false);
         setScore(0);
         setRows(0);
-        setLevel(0);
         setVolume(true);
         setPaused(false);
     }
@@ -52,9 +54,12 @@ const Tetris = () => {
     const drop = () => {
         // increase level when player has cleared 10 rows
         if (rows > (level + 1) * 10){
-            setLevel(prev => prev + 1);
-            // increase speed
-            setDropTime(1000 / (level + 1) + 200);
+            setLevel(prev => {
+                const next = prev + 1;
+                // increase speed based on next level
+                setDropTime(1000 / (next + 1) + 200);
+                return next;
+            });
         }
         if (!checkCollision(player, stage, {x: 0, y: 1})){
             updatePlayerPos({ x: 0 , y: 1, collided: false });
@@ -71,27 +76,38 @@ const Tetris = () => {
     const keyUp = ({ keyCode }) => {
         if(!gameOver){
             if(keyCode === 40) {
-                setDropTime(1000 / (level + 1) + 200);
+                setDropTime(normalDropTime);
             }
         }
     }
 
-    const dropPlayer = useCallback(() => {
+    const dropPlayer = () => {
         setDropTime(null);
         drop();
-    }, [level, drop]);
+    };
+
+    const hardDrop = () => {
+        // move piece down until collision, then mark collided
+        let steps = 0;
+        while (!checkCollision(player, stage, { x: 0, y: steps + 1 })) {
+            steps += 1;
+        }
+        if (steps > 0) {
+            updatePlayerPos({ x: 0, y: steps, collided: true });
+        }
+    };
     
-    const pauseGame = useCallback(() => {
+    const pauseGame = () => {
         if(!paused){
             setDropTime(null);
             setVolume(false);
             setPaused(true);
         } else if(paused){
-            setDropTime(1000 / (level + 1) + 200);
+            setDropTime(normalDropTime);
             setVolume(true);
             setPaused(false);
         }
-    }, [paused, level]);
+    };
 
     const move = ({ keyCode }) => {
         if (!gameOver){
@@ -112,6 +128,12 @@ const Tetris = () => {
     const handleTouchStart = (e) => {
         const touch = e.touches[0];
         touchStartRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+    };
+
+    const handleTouchMove = (e) => {
+        if (!touchStartRef.current) return;
+        // prevent browser pull-to-refresh / scroll
+        e.preventDefault();
     };
 
     const handleTouchEnd = (e) => {
@@ -138,10 +160,12 @@ const Tetris = () => {
             return;
         }
 
-        // vertical swipe down -> drop
+        // vertical swipe down -> hard drop
         if (absDy > absDx && dy > SWIPE_THRESHOLD) {
-            dropPlayer();
+            hardDrop();
         }
+
+        touchStartRef.current = null;
     };
 
     useInterval(() => {
@@ -155,6 +179,7 @@ const Tetris = () => {
             onKeyDown={e => move(e)} 
             onKeyUp={keyUp}
             onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
         >
             <StyledTetris>
@@ -168,7 +193,7 @@ const Tetris = () => {
                     {gameOver && (
                         <Display gameOver={gameOver} text="Game Over" />
                     )}
-                    <div>
+                    <div className="hud-row">
                         <Display text={`Score: ${score}`} />
                         <Display text={`Rows: ${rows}`} />
                         <Display text={`Level: ${level}`} />
@@ -179,7 +204,7 @@ const Tetris = () => {
                         onLeft={() => movePlayer(-1)}
                         onRight={() => movePlayer(1)}
                         onRotate={() => playerRotate(stage, 1)}
-                        onDrop={dropPlayer}
+                        onDrop={hardDrop}
                         onPause={pauseGame}
                         disabled={gameOver}
                         paused={paused}

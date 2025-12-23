@@ -2,6 +2,7 @@ import styled from 'styled-components';
 
 export const StyledStage = styled.div`
     display: grid;
+    touch-action: none;
     grid-template-rows: repeat(
         ${props => props.height},
         calc(25vw / ${props => props.width})
@@ -16,9 +17,9 @@ export const StyledStage = styled.div`
     @media (max-width: 900px) {
         grid-template-rows: repeat(
             ${props => props.height},
-            calc(80vw / ${props => props.width})
+            calc(70vw / ${props => props.width})
         );
-        max-width: 90vw;
+        max-width: 85vw;
     }
 `;
 
