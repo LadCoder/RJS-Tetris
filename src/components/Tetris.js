@@ -38,6 +38,7 @@ const Tetris = () => {
     }
 
     const normalDropTime = useMemo(() => 1000 / (level + 1) + 200, [level]);
+    const softDropTime = useMemo(() => Math.max(50, normalDropTime / 4), [normalDropTime]);
 
     const startGame = () => {
         setStage(createStage());
@@ -83,22 +84,10 @@ const Tetris = () => {
 
     const dropPlayer = () => {
         // soft drop speeds up fall instead of stopping gravity
-        setDropTime(Math.max(50, normalDropTime / 4));
+        setDropTime(softDropTime);
         drop();
     };
 
-    const hardDrop = () => {
-        // move piece down until collision, then mark collided
-        let steps = 0;
-        while (!checkCollision(player, stage, { x: 0, y: steps + 1 })) {
-            steps += 1;
-        }
-        if (steps > 0) {
-            updatePlayerPos({ x: 0, y: steps, collided: true });
-        }
-        setDropTime(normalDropTime);
-    };
-    
     const pauseGame = useCallback(() => {
         if(!paused){
             setDropTime(null);
@@ -129,13 +118,36 @@ const Tetris = () => {
 
     const handleTouchStart = (e) => {
         const touch = e.touches[0];
-        touchStartRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+        touchStartRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now(), softDropping: false };
     };
 
     const handleTouchMove = (e) => {
         if (!touchStartRef.current) return;
         // prevent browser pull-to-refresh / scroll when interacting with the stage
         e.preventDefault();
+
+        const touch = e.touches[0];
+        const dx = touch.clientX - touchStartRef.current.x;
+        const dy = touch.clientY - touchStartRef.current.y;
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+        const SWIPE_THRESHOLD = 20;
+
+        // horizontal swipe -> move once
+        if (absDx > absDy && absDx > SWIPE_THRESHOLD) {
+            movePlayer(dx > 0 ? 1 : -1);
+            touchStartRef.current.x = touch.clientX; // reset to allow repeated moves while swiping
+            touchStartRef.current.y = touch.clientY;
+            return;
+        }
+
+        // vertical swipe down -> enable soft drop while finger is down
+        if (absDy > absDx && dy > SWIPE_THRESHOLD) {
+            if (!touchStartRef.current.softDropping) {
+                touchStartRef.current.softDropping = true;
+                setDropTime(softDropTime);
+            }
+        }
     };
 
     const handleTouchEnd = (e) => {
@@ -153,20 +165,15 @@ const Tetris = () => {
         // tap -> rotate
         if (dt < TAP_TIME && absDx < TAP_MOVE && absDy < TAP_MOVE) {
             playerRotate(stage, 1);
-            return;
         }
 
-        // horizontal swipe -> move
-        if (absDx > absDy && absDx > SWIPE_THRESHOLD) {
-            movePlayer(dx > 0 ? 1 : -1);
-            return;
+        // small downward flick that didn't trigger soft drop in move handler
+        if (absDy > absDx && dy > SWIPE_THRESHOLD && !touchStartRef.current.softDropping) {
+            setDropTime(softDropTime);
+            drop();
         }
 
-        // vertical swipe down -> hard drop
-        if (absDy > absDx && dy > SWIPE_THRESHOLD) {
-            hardDrop();
-        }
-
+        setDropTime(normalDropTime);
         touchStartRef.current = null;
     };
 
@@ -210,7 +217,11 @@ const Tetris = () => {
                         onLeft={() => movePlayer(-1)}
                         onRight={() => movePlayer(1)}
                         onRotate={() => playerRotate(stage, 1)}
-                        onDrop={hardDrop}
+                        onDrop={() => {
+                            setDropTime(softDropTime);
+                            drop();
+                            setTimeout(() => setDropTime(normalDropTime), 300);
+                        }}
                         onPause={pauseGame}
                         disabled={gameOver}
                         paused={paused}
