@@ -1,5 +1,5 @@
 import React from 'react';
-import { useState } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import ReactHowler from 'react-howler';
 
 import bgMusic from '../sounds/tetris.mp3';
@@ -19,12 +19,14 @@ import { useGameStatus } from '../hooks/useGameStatus';
 import Stage from './Stage';
 import Display from './Display';
 import StartButton from './StartButton';
+import TouchControls from './TouchControls';
 
 const Tetris = () => {
     const [dropTime, setDropTime] = useState(null);
     const [gameOver, setGameOver] = useState(false);
     const [volume, setVolume] = useState(null);
     const [paused, setPaused] = useState(false);
+    const touchStartRef = useRef(null);
 
     const [player, updatePlayerPos, resetPlayer, playerRotate] = usePlayer();
     const [stage, setStage, rowsCleared] = useStage(player, resetPlayer);
@@ -35,14 +37,17 @@ const Tetris = () => {
             updatePlayerPos({x: dir, y: 0});
     }
 
+    const normalDropTime = useMemo(() => 1000 / (level + 1) + 200, [level]);
+    const softDropTime = useMemo(() => Math.max(50, normalDropTime / 4), [normalDropTime]);
+
     const startGame = () => {
         setStage(createStage());
-        setDropTime(1000 / (level + 1) + 200);
+        setLevel(0);
+        setDropTime(1200);
         resetPlayer();
         setGameOver(false);
         setScore(0);
         setRows(0);
-        setLevel(0);
         setVolume(true);
         setPaused(false);
     }
@@ -50,9 +55,12 @@ const Tetris = () => {
     const drop = () => {
         // increase level when player has cleared 10 rows
         if (rows > (level + 1) * 10){
-            setLevel(prev => prev + 1);
-            // increase speed
-            setDropTime(1000 / (level + 1) + 200);
+            setLevel(prev => {
+                const next = prev + 1;
+                // increase speed based on next level
+                setDropTime(1000 / (next + 1) + 200);
+                return next;
+            });
         }
         if (!checkCollision(player, stage, {x: 0, y: 1})){
             updatePlayerPos({ x: 0 , y: 1, collided: false });
@@ -69,27 +77,28 @@ const Tetris = () => {
     const keyUp = ({ keyCode }) => {
         if(!gameOver){
             if(keyCode === 40) {
-                setDropTime(1000 / (level + 1) + 200);
+                setDropTime(normalDropTime);
             }
         }
     }
 
     const dropPlayer = () => {
-        setDropTime(null);
+        // soft drop speeds up fall instead of stopping gravity
+        setDropTime(softDropTime);
         drop();
-    }
-    
-    const pauseGame = () => {
+    };
+
+    const pauseGame = useCallback(() => {
         if(!paused){
             setDropTime(null);
             setVolume(false);
             setPaused(true);
         } else if(paused){
-            setDropTime(1000 / (level + 1) + 200);
+            setDropTime(normalDropTime);
             setVolume(true);
             setPaused(false);
         }
-    }
+    }, [paused, normalDropTime]);
 
     const move = ({ keyCode }) => {
         if (!gameOver){
@@ -107,14 +116,87 @@ const Tetris = () => {
         }
     }
 
+    const handleTouchStart = (e) => {
+        const touch = e.touches[0];
+        touchStartRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now(), softDropping: false };
+    };
+
+    const handleTouchMove = (e) => {
+        if (!touchStartRef.current) return;
+        // prevent browser pull-to-refresh / scroll when interacting with the stage
+        e.preventDefault();
+
+        const touch = e.touches[0];
+        const dx = touch.clientX - touchStartRef.current.x;
+        const dy = touch.clientY - touchStartRef.current.y;
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+        const SWIPE_THRESHOLD = 20;
+
+        // horizontal swipe -> move once
+        if (absDx > absDy && absDx > SWIPE_THRESHOLD) {
+            movePlayer(dx > 0 ? 1 : -1);
+            touchStartRef.current.x = touch.clientX; // reset to allow repeated moves while swiping
+            touchStartRef.current.y = touch.clientY;
+            return;
+        }
+
+        // vertical swipe down -> enable soft drop while finger is down
+        if (absDy > absDx && dy > SWIPE_THRESHOLD) {
+            if (!touchStartRef.current.softDropping) {
+                touchStartRef.current.softDropping = true;
+                setDropTime(softDropTime);
+            }
+        }
+    };
+
+    const handleTouchEnd = (e) => {
+        if (!touchStartRef.current || gameOver) return;
+        const touch = e.changedTouches[0];
+        const dx = touch.clientX - touchStartRef.current.x;
+        const dy = touch.clientY - touchStartRef.current.y;
+        const dt = Date.now() - touchStartRef.current.time;
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+        const SWIPE_THRESHOLD = 30;
+        const TAP_TIME = 200;
+        const TAP_MOVE = 10;
+
+        // tap -> rotate
+        if (dt < TAP_TIME && absDx < TAP_MOVE && absDy < TAP_MOVE) {
+            playerRotate(stage, 1);
+        }
+
+        // small downward flick that didn't trigger soft drop in move handler
+        if (absDy > absDx && dy > SWIPE_THRESHOLD && !touchStartRef.current.softDropping) {
+            setDropTime(softDropTime);
+            drop();
+        }
+
+        setDropTime(normalDropTime);
+        touchStartRef.current = null;
+    };
+
     useInterval(() => {
         drop();
     }, dropTime);
 
     return (
-        <StyledTetrisWrapper role="button" tabIndex="0" onKeyDown={e => move(e)} onKeyUp={keyUp}>
+        <StyledTetrisWrapper 
+            role="button" 
+            tabIndex="0" 
+            onKeyDown={e => move(e)} 
+            onKeyUp={keyUp}
+        >
             <StyledTetris>
-                <Stage stage={stage} paused={paused}/>
+                <div
+                    className="touch-layer"
+                    onTouchStart={handleTouchStart}
+                    onTouchMove={handleTouchMove}
+                    onTouchEnd={handleTouchEnd}
+                >
+                    <Stage stage={stage} paused={paused}/>
+                </div>
                 <aside>
                     <ReactHowler
                         src={bgMusic}
@@ -124,13 +206,26 @@ const Tetris = () => {
                     {gameOver && (
                         <Display gameOver={gameOver} text="Game Over" />
                     )}
-                    <div>
+                    <div className="hud-row">
                         <Display text={`Score: ${score}`} />
                         <Display text={`Rows: ${rows}`} />
                         <Display text={`Level: ${level}`} />
                         <Display text={volume ? <VolumeUp onClick={() =>{setVolume(!volume)} }/> : <VolumeOff onClick={() =>{setVolume(!volume)} }/> }/>    
                     </div>
                     <StartButton callback={startGame}/>
+                    <TouchControls
+                        onLeft={() => movePlayer(-1)}
+                        onRight={() => movePlayer(1)}
+                        onRotate={() => playerRotate(stage, 1)}
+                        onDrop={() => {
+                            setDropTime(softDropTime);
+                            drop();
+                            setTimeout(() => setDropTime(normalDropTime), 300);
+                        }}
+                        onPause={pauseGame}
+                        disabled={gameOver}
+                        paused={paused}
+                    />
                 </aside>
             </StyledTetris>
         </StyledTetrisWrapper>
