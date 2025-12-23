@@ -82,7 +82,8 @@ const Tetris = () => {
     }
 
     const dropPlayer = () => {
-        setDropTime(null);
+        // soft drop speeds up fall instead of stopping gravity
+        setDropTime(Math.max(50, normalDropTime / 4));
         drop();
     };
 
@@ -95,9 +96,10 @@ const Tetris = () => {
         if (steps > 0) {
             updatePlayerPos({ x: 0, y: steps, collided: true });
         }
+        setDropTime(normalDropTime);
     };
     
-    const pauseGame = () => {
+    const pauseGame = useCallback(() => {
         if(!paused){
             setDropTime(null);
             setVolume(false);
@@ -107,7 +109,7 @@ const Tetris = () => {
             setVolume(true);
             setPaused(false);
         }
-    };
+    }, [paused, normalDropTime]);
 
     const move = ({ keyCode }) => {
         if (!gameOver){
@@ -132,7 +134,7 @@ const Tetris = () => {
 
     const handleTouchMove = (e) => {
         if (!touchStartRef.current) return;
-        // prevent browser pull-to-refresh / scroll
+        // prevent browser pull-to-refresh / scroll when interacting with the stage
         e.preventDefault();
     };
 
@@ -178,12 +180,16 @@ const Tetris = () => {
             tabIndex="0" 
             onKeyDown={e => move(e)} 
             onKeyUp={keyUp}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
         >
             <StyledTetris>
-                <Stage stage={stage} paused={paused}/>
+                <div
+                    className="touch-layer"
+                    onTouchStart={handleTouchStart}
+                    onTouchMove={handleTouchMove}
+                    onTouchEnd={handleTouchEnd}
+                >
+                    <Stage stage={stage} paused={paused}/>
+                </div>
                 <aside>
                     <ReactHowler
                         src={bgMusic}

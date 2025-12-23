@@ -8,7 +8,7 @@ export const StyledTetrisWrapper = styled.div`
     background: url('${bgImage}') #000;
     background-size: cover;
     overflow: hidden;
-    touch-action: none;
+    touch-action: manipulation;
     overscroll-behavior: contain;
 `
 export const StyledTetris = styled.div`
@@ -35,6 +35,10 @@ export const StyledTetris = styled.div`
         flex: 1 1 45%;
         width: auto;
         margin: 0;
+    }
+
+    .touch-layer {
+        touch-action: none;
     }
 
     @media (max-width: 900px) {
