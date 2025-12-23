@@ -7,7 +7,8 @@ export const StyledTetrisWrapper = styled.div`
     height: 100vh;
     background: url('${bgImage}') #000;
     background-size: cover;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
     touch-action: manipulation;
 `
 export const StyledTetris = styled.div`
